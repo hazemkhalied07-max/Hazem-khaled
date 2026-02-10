@@ -1,0 +1,440 @@
+{
+  "name": "Social Media Scraper - Tabby, Tamara, Madfu (FIXED)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 3
+            }
+          ]
+        }
+      },
+      "id": "cd69a03a-90db-4c40-b70c-b7cf13369752",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2448,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "companies",
+              "value": "=[\n  {\n    \"name\": \"Tabby\",\n    \"instagram\": \"tabbypay\",\n    \"facebook\": \"tabbypayments\",\n    \"twitter\": \"paywithtabby\",\n    \"website\": \"https://tabby.ai/en-AE\"\n  },\n  {\n    \"name\": \"Tamara\",\n    \"instagram\": \"usetamaraen\",\n    \"facebook\": \"UseTamaraen\",\n    \"twitter\": \"usetamaraen\",\n    \"website\": \"https://tamara.co/en-sa\"\n  },\n  {\n    \"name\": \"Madfu\",\n    \"instagram\": \"enjoy_madfu\",\n    \"facebook\": \"madfupay\",\n    \"twitter\": \"enjoy_madfu\",\n    \"website\": \"https://madfu.com.sa/\"\n  }\n]"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f4c151a9-d14b-4d3d-9d9c-a1182f3f80d3",
+      "name": "Company Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -2240,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the companies JSON string into individual objects\nconst companiesString = $input.first().json.companies;\nconst companies = JSON.parse(companiesString);\n\nreturn companies.map(company => ({ json: company }));"
+      },
+      "id": "285647fe-734f-464e-8280-aa094dec50ec",
+      "name": "Parse Companies",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2048,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://www.instagram.com/{{ $json.instagram }}/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": true,
+              "maxRedirects": 5
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "fe5bc497-5a7e-4cf4-9e53-25af28a52571",
+      "name": "Instagram Scraper",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1648,
+        -176
+      ],
+      "continueOnFail": true,
+      "notes": "Note: Instagram blocking is common. Consider using Apify Instagram Scraper or Instagram Graph API for production use."
+    },
+    {
+      "parameters": {
+        "url": "=https://api.twitter.com/2/users/by/username/{{ $json.twitter }}/tweets?max_results=10&tweet.fields=created_at,public_metrics",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "twitterOAuth2Api",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "913aa061-f24e-4f5e-8b51-790cb9ee5c53",
+      "name": "Twitter API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1616,
+        64
+      ],
+      "continueOnFail": true,
+      "notes": "Requires Twitter API credentials. Alternative: Use RSS Feed reader or Apify Twitter Scraper"
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v18.0/{{ $json.facebook }}/posts?fields=message,created_time,permalink_url&limit=10",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "58332134-6dda-4f93-abe3-c9802447dcbd",
+      "name": "Facebook Graph API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1632,
+        320
+      ],
+      "continueOnFail": true,
+      "notes": "Requires Facebook Graph API credentials with pages_read_engagement permission"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process and structure social media data from all platforms\nconst results = [];\nconst errors = [];\n\nfor (const item of $input.all()) {\n  try {\n    const company = item.json.company || 'Unknown';\n    const platform = item.json.platform || 'Unknown';\n    \n    // Instagram data processing\n    if (platform === 'Instagram' && item.json.body) {\n      // Extract from HTML or JSON response\n      const bodyStr = typeof item.json.body === 'string' ? item.json.body : JSON.stringify(item.json.body);\n      \n      // Look for JSON data in script tags\n      const jsonMatch = bodyStr.match(/window\\._sharedData = (.*?);<\\/script>/);\n      if (jsonMatch) {\n        const data = JSON.parse(jsonMatch[1]);\n        const user = data?.entry_data?.ProfilePage?.[0]?.graphql?.user;\n        \n        if (user?.edge_owner_to_timeline_media?.edges) {\n          const edges = user.edge_owner_to_timeline_media.edges.slice(0, 10);\n          edges.forEach(edge => {\n            results.push({\n              company: company,\n              platform: 'Instagram',\n              post_id: edge.node.id,\n              caption: edge.node.edge_media_to_caption.edges[0]?.node.text || '',\n              image_url: edge.node.display_url,\n              likes: edge.node.edge_liked_by.count,\n              comments: edge.node.edge_media_to_comment.count,\n              timestamp: new Date(edge.node.taken_at_timestamp * 1000).toISOString(),\n              url: `https://www.instagram.com/p/${edge.node.shortcode}/`\n            });\n          });\n        } else {\n          errors.push(`${company} - Instagram: No posts found or API changed`);\n        }\n      } else {\n        errors.push(`${company} - Instagram: Unable to extract data (consider using Apify)`);\n      }\n    }\n    \n    // Twitter/X data processing\n    if (platform === 'Twitter' && item.json.data) {\n      const tweets = Array.isArray(item.json.data) ? item.json.data : [item.json.data];\n      tweets.forEach(tweet => {\n        results.push({\n          company: company,\n          platform: 'Twitter/X',\n          post_id: tweet.id,\n          caption: tweet.text,\n          likes: tweet.public_metrics?.like_count || 0,\n          retweets: tweet.public_metrics?.retweet_count || 0,\n          replies: tweet.public_metrics?.reply_count || 0,\n          timestamp: tweet.created_at,\n          url: `https://twitter.com/${item.json.twitter}/status/${tweet.id}`\n        });\n      });\n    } else if (platform === 'Twitter' && item.json.error) {\n      errors.push(`${company} - Twitter: ${item.json.error.message || 'API error'}`);\n    }\n    \n    // Facebook data processing\n    if (platform === 'Facebook' && item.json.data) {\n      const posts = Array.isArray(item.json.data) ? item.json.data : [item.json.data];\n      posts.forEach(post => {\n        results.push({\n          company: company,\n          platform: 'Facebook',\n          post_id: post.id,\n          caption: post.message || '(No text)',\n          timestamp: post.created_time,\n          url: post.permalink_url || `https://www.facebook.com/${item.json.facebook}`\n        });\n      });\n    } else if (platform === 'Facebook' && item.json.error) {\n      errors.push(`${company} - Facebook: ${item.json.error.message || 'API error'}`);\n    }\n    \n  } catch (error) {\n    errors.push(`Error processing ${item.json.company || 'unknown'}: ${error.message}`);\n  }\n}\n\n// Add summary information\nconst summary = {\n  total_posts: results.length,\n  errors: errors,\n  timestamp: new Date().toISOString(),\n  platforms_scraped: [...new Set(results.map(r => r.platform))],\n  companies_scraped: [...new Set(results.map(r => r.company))]\n};\n\nreturn [{ json: { summary, posts: results } }];"
+      },
+      "id": "1ff91b70-8605-465a-bdfa-a38a0c9a5529",
+      "name": "Process and Structure Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -736,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8e4a8c8e-1234-5678-9abc-def012345678",
+              "name": "platform",
+              "value": "Instagram",
+              "type": "string"
+            },
+            {
+              "id": "8e4a8c8e-1234-5678-9abc-def012345679",
+              "name": "company",
+              "value": "={{ $json.name }}",
+              "type": "string"
+            },
+            {
+              "id": "8e4a8c8e-1234-5678-9abc-def012345680",
+              "name": "instagram",
+              "value": "={{ $json.instagram }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "712f6cde-a300-4f24-a263-3f1491149972",
+      "name": "Set Platform: Instagram",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        -1440,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9e4a8c8e-1234-5678-9abc-def012345678",
+              "name": "platform",
+              "value": "Twitter",
+              "type": "string"
+            },
+            {
+              "id": "9e4a8c8e-1234-5678-9abc-def012345679",
+              "name": "company",
+              "value": "={{ $json.name }}",
+              "type": "string"
+            },
+            {
+              "id": "9e4a8c8e-1234-5678-9abc-def012345680",
+              "name": "twitter",
+              "value": "={{ $json.twitter }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "abd2edff-487b-4a39-9a91-e57b96695ce9",
+      "name": "Set Platform: Twitter",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        -1392,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ae4a8c8e-1234-5678-9abc-def012345678",
+              "name": "platform",
+              "value": "Facebook",
+              "type": "string"
+            },
+            {
+              "id": "ae4a8c8e-1234-5678-9abc-def012345679",
+              "name": "company",
+              "value": "={{ $json.name }}",
+              "type": "string"
+            },
+            {
+              "id": "ae4a8c8e-1234-5678-9abc-def012345680",
+              "name": "facebook",
+              "value": "={{ $json.facebook }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "84830754-af20-47bb-aae8-626ae755697e",
+      "name": "Set Platform: Facebook",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        -1392,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "user",
+        "user": {
+          "__rl": true,
+          "value": "U0A6K4ZV221",
+          "mode": "list",
+          "cachedResultName": "hazem.khaled"
+        },
+        "text": "=*📊 Social Media Scraping Report*\n\n*Summary:*\n• Total Posts: {{ $json.summary.total_posts }}\n• Companies: {{ $json.summary.companies_scraped.join(', ') }}\n• Platforms: {{ $json.summary.platforms_scraped.join(', ') }}\n• Scraped at: {{ $json.summary.timestamp }}\n\n{{ $json.summary.errors.length > 0 ? '*⚠️ Errors:*\\n' + $json.summary.errors.map(e => '• ' + e).join('\\n') : '' }}\n\n*Latest Posts:*\n{{ $json.posts.slice(0, 5).map(p => `\\n📱 *${p.company}* (${p.platform})\\n${p.caption ? p.caption.substring(0, 100) + (p.caption.length > 100 ? '...' : '') : '(No caption)'}\\n${p.likes ? '❤️ ' + p.likes : ''} ${p.comments ? '💬 ' + p.comments : ''}\\n🔗 ${p.url}`).join('\\n\\n') }}",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        -320,
+        112
+      ],
+      "id": "4cb6e5d3-ba06-44dd-b32a-89534d26660f",
+      "name": "Send Slack Report",
+      "webhookId": "0b072854-677a-4bda-bce8-0532f44df4db",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "tqka8x2o9nAKfIDr",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        -1008,
+        64
+      ],
+      "id": "363f0e59-0c2d-4ab2-8446-594d9aeccd29",
+      "name": "Merge All Platforms"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Company Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Company Data": {
+      "main": [
+        [
+          {
+            "node": "Parse Companies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Companies": {
+      "main": [
+        [
+          {
+            "node": "Set Platform: Instagram",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Set Platform: Twitter",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Set Platform: Facebook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram Scraper": {
+      "main": [
+        [
+          {
+            "node": "Merge All Platforms",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Twitter API": {
+      "main": [
+        [
+          {
+            "node": "Merge All Platforms",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Facebook Graph API": {
+      "main": [
+        [
+          {
+            "node": "Merge All Platforms",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Set Platform: Instagram": {
+      "main": [
+        [
+          {
+            "node": "Instagram Scraper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Platform: Twitter": {
+      "main": [
+        [
+          {
+            "node": "Twitter API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process and Structure Data": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Slack Report": {
+      "main": [
+        []
+      ]
+    },
+    "Merge All Platforms": {
+      "main": [
+        [
+          {
+            "node": "Process and Structure Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Platform: Facebook": {
+      "main": [
+        [
+          {
+            "node": "Facebook Graph API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "versionId": "fixed-version-v1",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8e6de16fd241b34bbf7cbee9866368d4a0a006986a9dc6433ac172b75cfde2f7"
+  },
+  "id": "yr76NpwOhPrxxcq9H5glf-fixed",
+  "tags": []
+}
