@@ -1,0 +1,517 @@
+{
+  "name": "Dar Al Amirat - Offers Scraper",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger-1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "schedule-1",
+      "name": "Run Every 6 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 500]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://daralamirat.com.sa/api/offers",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json, text/html, */*"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "ar,en;q=0.9"
+            },
+            {
+              "name": "Referer",
+              "value": "https://daralamirat.com.sa/ar/offers"
+            }
+          ]
+        }
+      },
+      "id": "http-api-1",
+      "name": "Fetch Offers (API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://daralamirat.com.sa/ar/offers",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "ar,en;q=0.9"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "no-cache"
+            },
+            {
+              "name": "Cookie",
+              "value": ""
+            }
+          ]
+        }
+      },
+      "id": "http-html-1",
+      "name": "Fetch Offers Page (HTML)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 500],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "product_names",
+              "cssSelector": ".product-title, .product-name, .product__title, h3.title, [data-product-name]",
+              "returnArray": true
+            },
+            {
+              "key": "original_prices",
+              "cssSelector": ".price--compare, .product-price del, .old-price, s .price, [data-compare-price]",
+              "returnArray": true
+            },
+            {
+              "key": "sale_prices",
+              "cssSelector": ".price--sale, .product-price ins, .new-price, .sale-price, [data-sale-price]",
+              "returnArray": true
+            },
+            {
+              "key": "discount_badges",
+              "cssSelector": ".badge--sale, .discount-badge, .sale-badge, .offer-badge, [data-discount]",
+              "returnArray": true
+            },
+            {
+              "key": "product_images",
+              "cssSelector": ".product-image img, .product__image img",
+              "returnValue": "src",
+              "returnArray": true
+            },
+            {
+              "key": "product_links",
+              "cssSelector": ".product-title a, .product-name a, .product__title a, a.product-link",
+              "returnValue": "href",
+              "returnArray": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "html-extract-1",
+      "name": "Extract Products from HTML",
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [720, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{ $json.statusCode }}",
+              "rightValue": 200,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-api-success",
+      "name": "API Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process API JSON response\nconst items = $input.all();\nconst products = [];\n\nfor (const item of items) {\n  const data = item.json;\n  \n  // Handle Salla API response format\n  const productList = data.data?.products || data.products || data.data || [];\n  \n  if (Array.isArray(productList)) {\n    for (const product of productList) {\n      products.push({\n        name: product.name || product.title || 'N/A',\n        brand: product.brand?.name || product.brand || 'N/A',\n        category: product.category?.name || product.category || 'N/A',\n        original_price: product.regular_price?.amount || product.price?.regular || product.compare_at_price || 'N/A',\n        sale_price: product.sale_price?.amount || product.price?.sale || product.price?.amount || 'N/A',\n        discount_percentage: product.discount?.percentage || product.discount_percent || calculateDiscount(product),\n        currency: product.currency || product.price?.currency || 'SAR',\n        image: product.image?.url || product.thumbnail || '',\n        url: product.url || product.link || '',\n        in_stock: product.availability || product.in_stock || true,\n        sku: product.sku || product.id || ''\n      });\n    }\n  }\n}\n\nfunction calculateDiscount(product) {\n  const original = parseFloat(product.regular_price?.amount || product.compare_at_price || 0);\n  const sale = parseFloat(product.sale_price?.amount || product.price?.amount || 0);\n  if (original > 0 && sale > 0 && original > sale) {\n    return Math.round(((original - sale) / original) * 100) + '%';\n  }\n  return 'N/A';\n}\n\nif (products.length === 0) {\n  return [{ json: { message: 'No products found in API response', raw_data: items[0]?.json } }];\n}\n\nreturn products.map(p => ({ json: p }));"
+      },
+      "id": "code-api-1",
+      "name": "Process API Products",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 260]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process HTML-extracted product data\nconst input = $input.first().json;\nconst products = [];\n\nconst names = input.product_names || [];\nconst originalPrices = input.original_prices || [];\nconst salePrices = input.sale_prices || [];\nconst discounts = input.discount_badges || [];\nconst images = input.product_images || [];\nconst links = input.product_links || [];\n\nconst maxLen = Math.max(names.length, salePrices.length);\n\nfor (let i = 0; i < maxLen; i++) {\n  const name = names[i] || 'N/A';\n  const originalPrice = originalPrices[i] || 'N/A';\n  const salePrice = salePrices[i] || 'N/A';\n  const discount = discounts[i] || calculateDiscount(originalPrice, salePrice);\n  const image = images[i] || '';\n  const link = links[i] ? `https://daralamirat.com.sa${links[i]}` : '';\n\n  // Clean price strings\n  const cleanPrice = (p) => p.toString().replace(/[^\\d.]/g, '');\n\n  products.push({\n    name: name.trim(),\n    original_price: originalPrice.toString().trim(),\n    sale_price: salePrice.toString().trim(),\n    discount_percentage: discount.toString().trim(),\n    image: image,\n    url: link,\n    currency: 'SAR',\n    scraped_at: new Date().toISOString()\n  });\n}\n\nfunction calculateDiscount(original, sale) {\n  const o = parseFloat(original.toString().replace(/[^\\d.]/g, ''));\n  const s = parseFloat(sale.toString().replace(/[^\\d.]/g, ''));\n  if (o > 0 && s > 0 && o > s) {\n    return Math.round(((o - s) / o) * 100) + '%';\n  }\n  return 'N/A';\n}\n\nif (products.length === 0) {\n  return [{ json: { message: 'No products extracted from HTML. The page may require JavaScript rendering. Try using a headless browser or the Salla API.', raw_html_length: (input.data || '').length } }];\n}\n\nreturn products.map(p => ({ json: p }));"
+      },
+      "id": "code-html-1",
+      "name": "Process HTML Products",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 500]
+    },
+    {
+      "parameters": {},
+      "id": "merge-1",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1200, 380]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Deduplicate and clean final product list\nconst items = $input.all();\nconst seen = new Set();\nconst products = [];\n\nfor (const item of items) {\n  const p = item.json;\n  \n  // Skip error messages\n  if (p.message && !p.name) continue;\n  \n  const key = (p.name || '').toLowerCase().trim();\n  if (key && key !== 'n/a' && !seen.has(key)) {\n    seen.add(key);\n    products.push({\n      name: p.name,\n      brand: p.brand || 'N/A',\n      category: p.category || 'N/A',\n      original_price: p.original_price,\n      sale_price: p.sale_price,\n      discount_percentage: p.discount_percentage,\n      currency: p.currency || 'SAR',\n      url: p.url || '',\n      image: p.image || '',\n      in_stock: p.in_stock !== undefined ? p.in_stock : true,\n      scraped_at: new Date().toISOString()\n    });\n  }\n}\n\nif (products.length === 0) {\n  return [{\n    json: {\n      status: 'no_products_found',\n      message: 'Could not extract products. The site may be blocking automated access.',\n      suggestion: 'Try using Salla API with store credentials, or use a headless browser approach.',\n      timestamp: new Date().toISOString()\n    }\n  }];\n}\n\nreturn products.map(p => ({ json: p }));"
+      },
+      "id": "code-dedupe-1",
+      "name": "Deduplicate & Clean",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1440, 380]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate summary report\nconst items = $input.all();\nconst products = items.filter(i => i.json.name);\n\nconst summary = {\n  total_products: products.length,\n  scraped_at: new Date().toISOString(),\n  source: 'daralamirat.com.sa',\n  categories: {},\n  price_ranges: {\n    min_sale_price: Infinity,\n    max_sale_price: 0,\n    max_discount: '0%'\n  }\n};\n\nlet maxDiscount = 0;\n\nfor (const item of products) {\n  const p = item.json;\n  \n  // Count categories\n  const cat = p.category || 'Uncategorized';\n  summary.categories[cat] = (summary.categories[cat] || 0) + 1;\n  \n  // Track price ranges\n  const salePrice = parseFloat(p.sale_price?.toString().replace(/[^\\d.]/g, '') || '0');\n  if (salePrice > 0) {\n    summary.price_ranges.min_sale_price = Math.min(summary.price_ranges.min_sale_price, salePrice);\n    summary.price_ranges.max_sale_price = Math.max(summary.price_ranges.max_sale_price, salePrice);\n  }\n  \n  const discount = parseInt(p.discount_percentage?.toString().replace(/[^\\d]/g, '') || '0');\n  if (discount > maxDiscount) {\n    maxDiscount = discount;\n    summary.price_ranges.max_discount = discount + '%';\n  }\n}\n\nif (summary.price_ranges.min_sale_price === Infinity) {\n  summary.price_ranges.min_sale_price = 'N/A';\n}\n\nreturn [{ json: summary }, ...items];"
+      },
+      "id": "code-summary-1",
+      "name": "Generate Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1680, 380]
+    },
+    {
+      "parameters": {
+        "operation": "toFile",
+        "fileFormat": "xlsx",
+        "options": {
+          "sheetName": "Dar Al Amirat Offers",
+          "fileName": "dar-alamirat-offers-{{ $now.format('yyyy-MM-dd') }}.xlsx"
+        }
+      },
+      "id": "spreadsheet-1",
+      "name": "Export to Excel",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 2,
+      "position": [1920, 260]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "={{ $env.GOOGLE_SHEET_ID || 'YOUR_GOOGLE_SHEET_ID_HERE' }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Offers"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {}
+        },
+        "options": {}
+      },
+      "id": "gsheets-1",
+      "name": "Save to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1920, 500],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WEBHOOK_URL || 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK' }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "=🛍️ *Dar Al Amirat Offers Update*\\n\\nTotal products on sale: {{ $json.total_products || 0 }}\\nMax discount: {{ $json.price_ranges?.max_discount || 'N/A' }}\\nScraped at: {{ $json.scraped_at }}\\n\\n👉 View all offers: https://daralamirat.com.sa/ar/offers"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "slack-notify-1",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1920, 720],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://daralamirat.com.sa/api/products?category=offers&per_page=50&page={{ $json.page || 1 }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Requested-With",
+              "value": "XMLHttpRequest"
+            }
+          ]
+        }
+      },
+      "id": "http-salla-api",
+      "name": "Salla Store API (Fallback)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 720],
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Offers (API)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Offers Page (HTML)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Salla Store API (Fallback)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Every 6 Hours": {
+      "main": [
+        [
+          {
+            "node": "Fetch Offers (API)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Offers Page (HTML)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Salla Store API (Fallback)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Offers (API)": {
+      "main": [
+        [
+          {
+            "node": "API Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Offers Page (HTML)": {
+      "main": [
+        [
+          {
+            "node": "Extract Products from HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Success?": {
+      "main": [
+        [
+          {
+            "node": "Process API Products",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Extract Products from HTML": {
+      "main": [
+        [
+          {
+            "node": "Process HTML Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process API Products": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process HTML Products": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Results": {
+      "main": [
+        [
+          {
+            "node": "Deduplicate & Clean",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deduplicate & Clean": {
+      "main": [
+        [
+          {
+            "node": "Generate Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Summary": {
+      "main": [
+        [
+          {
+            "node": "Export to Excel",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save to Google Sheets",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "scraping"
+    },
+    {
+      "name": "e-commerce"
+    },
+    {
+      "name": "dar-alamirat"
+    }
+  ],
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "dar-alamirat-scraper"
+  }
+}
