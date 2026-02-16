@@ -1,0 +1,150 @@
+{
+  "name": "Dar Alamirat Offers Scraper - Puppeteer (JS Rendered)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger-v2",
+      "name": "Daily Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {},
+      "id": "manual-trigger-v2",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [220, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "const puppeteer = require('puppeteer');\n\nconst browser = await puppeteer.launch({\n  headless: 'new',\n  args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']\n});\n\nconst page = await browser.newPage();\n\n// Set a realistic viewport and user agent\nawait page.setViewport({ width: 1920, height: 1080 });\nawait page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');\n\n// Set Arabic language preference\nawait page.setExtraHTTPHeaders({\n  'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8'\n});\n\ntry {\n  // Navigate to the offers/homepage\n  await page.goto('https://daralamirat.com.sa/', {\n    waitUntil: 'networkidle2',\n    timeout: 60000\n  });\n\n  // Wait for product elements to load\n  await page.waitForTimeout(5000);\n\n  // Try to find and click an \"offers\" or \"عروض\" link if it exists\n  const offersLink = await page.$('a[href*=\"offer\"], a[href*=\"عروض\"], a[href*=\"sale\"], a[href*=\"deal\"]');\n  if (offersLink) {\n    await offersLink.click();\n    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {});\n    await page.waitForTimeout(3000);\n  }\n\n  // Extract offers data from the page\n  const offers = await page.evaluate(() => {\n    const results = [];\n\n    // Common e-commerce product card selectors (covers Salla, Zid, Shopify, WooCommerce, custom)\n    const productSelectors = [\n      '.product-card', '.product-item', '.product-block',\n      '.offer-card', '.deal-card', '.sale-item',\n      '[class*=\"product-card\"]', '[class*=\"product-item\"]',\n      '[data-product]', '.grid-product', '.product',\n      '.s-product-card-entry',  // Salla\n      '.woocommerce-loop-product',  // WooCommerce\n      '.product-grid-item'  // Common\n    ];\n\n    let productElements = [];\n    for (const selector of productSelectors) {\n      const elements = document.querySelectorAll(selector);\n      if (elements.length > 0) {\n        productElements = elements;\n        break;\n      }\n    }\n\n    // If no product cards found, try broader approach\n    if (productElements.length === 0) {\n      // Look for any element with price-like content\n      const allElements = document.querySelectorAll('[class*=\"product\"], [class*=\"offer\"], [class*=\"item\"]');\n      productElements = allElements;\n    }\n\n    productElements.forEach((el) => {\n      // Extract title\n      const titleEl = el.querySelector('h2, h3, h4, .title, .name, [class*=\"title\"], [class*=\"name\"], .product-title, .product-name');\n      const title = titleEl ? titleEl.textContent.trim() : '';\n\n      // Extract current price\n      const priceEl = el.querySelector('.price, .sale-price, .current-price, [class*=\"price\"]:not([class*=\"old\"]):not([class*=\"was\"]):not([class*=\"original\"])');\n      const price = priceEl ? priceEl.textContent.trim() : '';\n\n      // Extract original price\n      const oldPriceEl = el.querySelector('.old-price, .was-price, .original-price, del, s, [class*=\"old-price\"], [class*=\"was\"], [class*=\"original\"], [class*=\"regular-price\"]');\n      const oldPrice = oldPriceEl ? oldPriceEl.textContent.trim() : '';\n\n      // Extract image\n      const imgEl = el.querySelector('img');\n      const image = imgEl ? (imgEl.getAttribute('data-src') || imgEl.getAttribute('src') || '') : '';\n\n      // Extract link\n      const linkEl = el.querySelector('a[href]');\n      const link = linkEl ? linkEl.getAttribute('href') : '';\n\n      // Extract discount badge\n      const badgeEl = el.querySelector('.badge, .discount, [class*=\"discount\"], [class*=\"badge\"], [class*=\"sale\"], [class*=\"off\"]');\n      const discount = badgeEl ? badgeEl.textContent.trim() : '';\n\n      if (title || price) {\n        results.push({\n          title,\n          current_price: price,\n          original_price: oldPrice,\n          discount_badge: discount,\n          image_url: image,\n          product_link: link\n        });\n      }\n    });\n\n    return results;\n  });\n\n  // Also get the page title and URL for reference\n  const pageTitle = await page.title();\n  const pageUrl = page.url();\n\n  await browser.close();\n\n  // Make links absolute\n  const processedOffers = offers.map(offer => ({\n    ...offer,\n    product_link: offer.product_link && !offer.product_link.startsWith('http')\n      ? 'https://daralamirat.com.sa' + (offer.product_link.startsWith('/') ? '' : '/') + offer.product_link\n      : offer.product_link,\n    image_url: offer.image_url && !offer.image_url.startsWith('http')\n      ? 'https://daralamirat.com.sa' + (offer.image_url.startsWith('/') ? '' : '/') + offer.image_url\n      : offer.image_url\n  }));\n\n  return [\n    {\n      json: {\n        website: 'daralamirat.com.sa',\n        website_name: 'دار الأميرات - Dar Alamirat',\n        page_title: pageTitle,\n        page_url: pageUrl,\n        scrape_date: new Date().toISOString(),\n        total_offers_found: processedOffers.length,\n        offers: processedOffers\n      }\n    }\n  ];\n\n} catch (error) {\n  await browser.close();\n  return [\n    {\n      json: {\n        status: 'error',\n        message: error.message,\n        scraped_at: new Date().toISOString()\n      }\n    }\n  ];\n}"
+      },
+      "id": "puppeteer-scraper",
+      "name": "Scrape with Puppeteer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 400]
+    },
+    {
+      "parameters": {
+        "operation": "toJson",
+        "options": {
+          "fileName": "={{ 'daralamirat_offers_' + new Date().toISOString().split('T')[0] + '.json' }}"
+        }
+      },
+      "id": "convert-json-v2",
+      "name": "Convert to JSON File",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [740, 400]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ '/tmp/daralamirat_offers_' + new Date().toISOString().split('T')[0] + '.json' }}",
+        "options": {}
+      },
+      "id": "save-file-v2",
+      "name": "Save JSON to Disk",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [1000, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nif (data.status === 'error') {\n  return [{\n    json: {\n      status: 'error',\n      message: `Scraping failed: ${data.message}`,\n      date: new Date().toISOString()\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    status: 'success',\n    message: `Successfully scraped ${data.total_offers_found} offers from ${data.website_name}`,\n    total_offers: data.total_offers_found,\n    page_scraped: data.page_url,\n    date: data.scrape_date,\n    file_saved: `/tmp/daralamirat_offers_${new Date().toISOString().split('T')[0]}.json`\n  }\n}];"
+      },
+      "id": "result-summary-v2",
+      "name": "Result Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1260, 400]
+    }
+  ],
+  "connections": {
+    "Daily Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Scrape with Puppeteer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Scrape with Puppeteer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape with Puppeteer": {
+      "main": [
+        [
+          {
+            "node": "Convert to JSON File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to JSON File": {
+      "main": [
+        [
+          {
+            "node": "Save JSON to Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save JSON to Disk": {
+      "main": [
+        [
+          {
+            "node": "Result Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "web-scraping"
+    },
+    {
+      "name": "daralamirat"
+    },
+    {
+      "name": "puppeteer"
+    },
+    {
+      "name": "offers"
+    }
+  ]
+}

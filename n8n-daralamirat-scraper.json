@@ -1,0 +1,453 @@
+{
+  "name": "Dar Alamirat Offers Scraper - Daily",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [220, 520]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://daralamirat.com.sa/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "ar,en-US;q=0.9,en;q=0.8"
+            },
+            {
+              "name": "Accept-Encoding",
+              "value": "gzip, deflate, br"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "no-cache"
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.google.com/"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": true,
+              "maxRedirects": 5
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "fetch-homepage",
+      "name": "Fetch Homepage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://daralamirat.com.sa/offers",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "ar,en-US;q=0.9,en;q=0.8"
+            },
+            {
+              "name": "Accept-Encoding",
+              "value": "gzip, deflate, br"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "no-cache"
+            },
+            {
+              "name": "Referer",
+              "value": "https://daralamirat.com.sa/"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": true,
+              "maxRedirects": 5
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "fetch-offers-page",
+      "name": "Fetch Offers Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 520]
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "offer_titles",
+              "cssSelector": ".product-card .product-title, .product-item .product-name, .offer-card .title, [class*='product'] h3, [class*='product'] h2, .product-title a, .product-name a",
+              "returnArray": true
+            },
+            {
+              "key": "offer_prices",
+              "cssSelector": ".product-card .price, .product-item .price, .offer-card .price, [class*='product'] .price, .product-price, .sale-price, [class*='price']",
+              "returnArray": true
+            },
+            {
+              "key": "offer_old_prices",
+              "cssSelector": ".product-card .old-price, .product-item .old-price, .offer-card .old-price, [class*='product'] .old-price, .regular-price, del, [class*='was-price'], [class*='original-price']",
+              "returnArray": true
+            },
+            {
+              "key": "offer_images",
+              "cssSelector": ".product-card img, .product-item img, .offer-card img, [class*='product'] img",
+              "returnArray": true,
+              "returnValue": "attribute",
+              "attribute": "src"
+            },
+            {
+              "key": "offer_links",
+              "cssSelector": ".product-card a, .product-item a, .offer-card a, [class*='product'] a[href]",
+              "returnArray": true,
+              "returnValue": "attribute",
+              "attribute": "href"
+            },
+            {
+              "key": "discount_badges",
+              "cssSelector": ".badge, .discount, .sale-badge, [class*='discount'], [class*='badge'], [class*='offer'], [class*='sale']",
+              "returnArray": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "extract-homepage-offers",
+      "name": "Extract Homepage Offers",
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [740, 300]
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "offer_titles",
+              "cssSelector": ".product-card .product-title, .product-item .product-name, .offer-card .title, [class*='product'] h3, [class*='product'] h2, .product-title a, .product-name a",
+              "returnArray": true
+            },
+            {
+              "key": "offer_prices",
+              "cssSelector": ".product-card .price, .product-item .price, .offer-card .price, [class*='product'] .price, .product-price, .sale-price, [class*='price']",
+              "returnArray": true
+            },
+            {
+              "key": "offer_old_prices",
+              "cssSelector": ".product-card .old-price, .product-item .old-price, .offer-card .old-price, [class*='product'] .old-price, .regular-price, del, [class*='was-price'], [class*='original-price']",
+              "returnArray": true
+            },
+            {
+              "key": "offer_images",
+              "cssSelector": ".product-card img, .product-item img, .offer-card img, [class*='product'] img",
+              "returnArray": true,
+              "returnValue": "attribute",
+              "attribute": "src"
+            },
+            {
+              "key": "offer_links",
+              "cssSelector": ".product-card a, .product-item a, .offer-card a, [class*='product'] a[href]",
+              "returnArray": true,
+              "returnValue": "attribute",
+              "attribute": "href"
+            },
+            {
+              "key": "discount_badges",
+              "cssSelector": ".badge, .discount, .sale-badge, [class*='discount'], [class*='badge'], [class*='offer'], [class*='sale']",
+              "returnArray": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "extract-offers-page",
+      "name": "Extract Offers Page Data",
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [740, 520]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine and structure offers from both sources\nconst homepageData = $('Extract Homepage Offers').first().json;\nconst offersPageData = $('Extract Offers Page Data').first().json;\n\nconst now = new Date().toISOString();\nconst allOffers = [];\n\n// Process homepage offers\nfunction processOffers(data, source) {\n  const titles = data.offer_titles || [];\n  const prices = data.offer_prices || [];\n  const oldPrices = data.offer_old_prices || [];\n  const images = data.offer_images || [];\n  const links = data.offer_links || [];\n  const discounts = data.discount_badges || [];\n\n  const maxLength = Math.max(titles.length, prices.length, links.length);\n\n  for (let i = 0; i < maxLength; i++) {\n    const title = titles[i] ? titles[i].trim() : '';\n    const price = prices[i] ? prices[i].trim() : '';\n    const oldPrice = oldPrices[i] ? oldPrices[i].trim() : '';\n    const image = images[i] ? images[i].trim() : '';\n    let link = links[i] ? links[i].trim() : '';\n    const discount = discounts[i] ? discounts[i].trim() : '';\n\n    // Skip empty entries\n    if (!title && !price) continue;\n\n    // Make relative URLs absolute\n    if (link && !link.startsWith('http')) {\n      link = 'https://daralamirat.com.sa' + (link.startsWith('/') ? '' : '/') + link;\n    }\n\n    // Calculate discount percentage if both prices exist\n    let discountPercent = '';\n    if (price && oldPrice) {\n      const currentPrice = parseFloat(price.replace(/[^0-9.]/g, ''));\n      const originalPrice = parseFloat(oldPrice.replace(/[^0-9.]/g, ''));\n      if (originalPrice > 0 && currentPrice > 0) {\n        discountPercent = Math.round(((originalPrice - currentPrice) / originalPrice) * 100) + '%';\n      }\n    }\n\n    allOffers.push({\n      title,\n      current_price: price,\n      original_price: oldPrice,\n      discount_percent: discount || discountPercent,\n      image_url: image,\n      product_link: link,\n      source_page: source,\n      scraped_at: now\n    });\n  }\n}\n\ntry {\n  processOffers(homepageData, 'homepage');\n} catch(e) {\n  // Homepage data might not be available\n}\n\ntry {\n  processOffers(offersPageData, 'offers_page');\n} catch(e) {\n  // Offers page data might not be available\n}\n\n// Remove duplicates based on title\nconst uniqueOffers = allOffers.filter((offer, index, self) =>\n  index === self.findIndex((o) => o.title === offer.title && o.title !== '')\n);\n\nreturn [\n  {\n    json: {\n      website: 'daralamirat.com.sa',\n      website_name: 'دار الأميرات - Dar Alamirat',\n      scrape_date: now,\n      total_offers_found: uniqueOffers.length,\n      offers: uniqueOffers\n    }\n  }\n];"
+      },
+      "id": "combine-and-structure",
+      "name": "Combine & Structure Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 400]
+    },
+    {
+      "parameters": {
+        "operation": "toJson",
+        "options": {
+          "fileName": "={{ 'daralamirat_offers_' + new Date().toISOString().split('T')[0] + '.json' }}"
+        }
+      },
+      "id": "convert-to-json-file",
+      "name": "Convert to JSON File",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [1260, 300]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ '/tmp/daralamirat_offers_' + new Date().toISOString().split('T')[0] + '.json' }}",
+        "options": {}
+      },
+      "id": "save-to-disk",
+      "name": "Save JSON to Disk",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [1520, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-offers-found",
+              "leftValue": "={{ $json.total_offers_found }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-offers-exist",
+      "name": "Offers Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1260, 520]
+    },
+    {
+      "parameters": {
+        "jsCode": "// If no offers were found with CSS selectors, try alternative approach\n// This logs the issue and provides debugging info\nconst inputData = $input.first().json;\n\nreturn [\n  {\n    json: {\n      status: 'warning',\n      message: 'No offers extracted. The website may use JavaScript rendering (SPA) or the CSS selectors need updating.',\n      suggestion: 'Consider these solutions:',\n      solutions: [\n        '1. Check if the site uses Salla platform - if so, try the Salla API endpoint: https://daralamirat.com.sa/api/products',\n        '2. Use n8n Puppeteer/Playwright node for JavaScript-rendered content',\n        '3. Update CSS selectors after inspecting the actual page HTML',\n        '4. Check if the site has a public API or RSS feed for offers'\n      ],\n      debug_data: inputData,\n      scraped_at: new Date().toISOString()\n    }\n  }\n];"
+      },
+      "id": "fallback-handler",
+      "name": "Fallback - No Offers Found",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1520, 620]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Summary node - log the results\nconst data = $input.first().json;\n\nreturn [\n  {\n    json: {\n      status: 'success',\n      message: `Successfully scraped ${data.total_offers_found} offers from daralamirat.com.sa`,\n      website: data.website_name,\n      total_offers: data.total_offers_found,\n      date: data.scrape_date,\n      file_saved: `/tmp/daralamirat_offers_${new Date().toISOString().split('T')[0]}.json`\n    }\n  }\n];"
+      },
+      "id": "success-summary",
+      "name": "Success Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1520, 180]
+    }
+  ],
+  "connections": {
+    "Daily Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Homepage",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Offers Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Homepage",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Offers Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Homepage": {
+      "main": [
+        [
+          {
+            "node": "Extract Homepage Offers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Offers Page": {
+      "main": [
+        [
+          {
+            "node": "Extract Offers Page Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Homepage Offers": {
+      "main": [
+        [
+          {
+            "node": "Combine & Structure Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Offers Page Data": {
+      "main": [
+        [
+          {
+            "node": "Combine & Structure Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Combine & Structure Data": {
+      "main": [
+        [
+          {
+            "node": "Convert to JSON File",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Offers Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to JSON File": {
+      "main": [
+        [
+          {
+            "node": "Save JSON to Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save JSON to Disk": {
+      "main": [
+        [
+          {
+            "node": "Success Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offers Found?": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Fallback - No Offers Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "web-scraping"
+    },
+    {
+      "name": "daralamirat"
+    },
+    {
+      "name": "offers"
+    }
+  ]
+}
